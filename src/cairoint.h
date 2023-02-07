@@ -943,6 +943,13 @@ _cairo_get_locale_decimal_point (void);
 cairo_private double
 _cairo_strtod (const char *nptr, char **endptr);
 
+#ifdef HAVE_STRNDUP
+#define _cairo_strndup strndup
+#else
+cairo_private char *
+_cairo_strndup (const char *s, size_t n);
+#endif
+
 /* cairo-path-fixed.c */
 cairo_private cairo_path_fixed_t *
 _cairo_path_fixed_create (void);
@@ -1285,13 +1292,14 @@ _cairo_scaled_glyph_set_path (cairo_scaled_glyph_t *scaled_glyph,
 cairo_private void
 _cairo_scaled_glyph_set_recording_surface (cairo_scaled_glyph_t *scaled_glyph,
                                            cairo_scaled_font_t *scaled_font,
-                                           cairo_surface_t *recording_surface);
+                                           cairo_surface_t *recording_surface,
+					   const cairo_color_t *foreground_color);
 
 cairo_private void
 _cairo_scaled_glyph_set_color_surface (cairo_scaled_glyph_t *scaled_glyph,
 		                       cairo_scaled_font_t *scaled_font,
 		                       cairo_image_surface_t *surface,
-                                       cairo_bool_t uses_foreground_color);
+                                       const cairo_color_t *foreground_color);
 
 cairo_private cairo_int_status_t
 _cairo_scaled_glyph_lookup (cairo_scaled_font_t *scaled_font,
@@ -1848,6 +1856,12 @@ _cairo_debug_print_matrix (FILE *file, const cairo_matrix_t *matrix);
 cairo_private void
 _cairo_debug_print_rect (FILE *file, const cairo_rectangle_int_t *rect);
 
+cairo_private const char *
+_cairo_debug_operator_to_string (cairo_operator_t op);
+
+cairo_private const char *
+_cairo_debug_status_to_string (cairo_int_status_t status);
+
 cairo_private cairo_status_t
 _cairo_bentley_ottmann_tessellate_rectilinear_polygon (cairo_traps_t	 *traps,
 						       const cairo_polygon_t *polygon,
@@ -1939,17 +1953,26 @@ cairo_private cairo_status_t
 _cairo_fopen (const char *filename, const char *mode, FILE **file_out);
 
 /* Avoid unnecessary PLT entries.  */
+slim_hidden_proto (cairo_append_path);
+slim_hidden_proto (cairo_arc);
+slim_hidden_proto (cairo_arc_negative);
+slim_hidden_proto (cairo_clip);
+slim_hidden_proto (cairo_clip_extents);
 slim_hidden_proto (cairo_clip_preserve);
 slim_hidden_proto (cairo_close_path);
+slim_hidden_proto (cairo_copy_path);
 slim_hidden_proto (cairo_create);
 slim_hidden_proto (cairo_curve_to);
 slim_hidden_proto (cairo_destroy);
+slim_hidden_proto (cairo_device_to_user);
+slim_hidden_proto (cairo_fill);
 slim_hidden_proto (cairo_fill_preserve);
 slim_hidden_proto (cairo_font_face_destroy);
 slim_hidden_proto (cairo_font_face_get_user_data);
 slim_hidden_proto_no_warn (cairo_font_face_reference);
 slim_hidden_proto (cairo_font_face_set_user_data);
 slim_hidden_proto (cairo_font_options_equal);
+slim_hidden_proto (cairo_font_options_get_custom_palette_color);
 slim_hidden_proto (cairo_font_options_hash);
 slim_hidden_proto (cairo_font_options_merge);
 slim_hidden_proto (cairo_font_options_set_antialias);
@@ -1959,14 +1982,17 @@ slim_hidden_proto (cairo_font_options_set_subpixel_order);
 slim_hidden_proto (cairo_font_options_status);
 slim_hidden_proto (cairo_format_stride_for_width);
 slim_hidden_proto (cairo_get_current_point);
-slim_hidden_proto (cairo_get_line_width);
 slim_hidden_proto (cairo_get_hairline);
+slim_hidden_proto (cairo_get_line_width);
 slim_hidden_proto (cairo_get_matrix);
 slim_hidden_proto (cairo_get_scaled_font);
+slim_hidden_proto (cairo_get_source);
 slim_hidden_proto (cairo_get_target);
 slim_hidden_proto (cairo_get_tolerance);
 slim_hidden_proto (cairo_glyph_allocate);
 slim_hidden_proto (cairo_glyph_free);
+slim_hidden_proto (cairo_has_current_point);
+slim_hidden_proto (cairo_identity_matrix);
 slim_hidden_proto (cairo_image_surface_create);
 slim_hidden_proto (cairo_image_surface_create_for_data);
 slim_hidden_proto (cairo_image_surface_get_data);
@@ -1983,20 +2009,14 @@ slim_hidden_proto (cairo_matrix_init_scale);
 slim_hidden_proto (cairo_matrix_init_translate);
 slim_hidden_proto (cairo_matrix_invert);
 slim_hidden_proto (cairo_matrix_multiply);
+slim_hidden_proto (cairo_matrix_rotate);
 slim_hidden_proto (cairo_matrix_scale);
 slim_hidden_proto (cairo_matrix_transform_distance);
 slim_hidden_proto (cairo_matrix_transform_point);
 slim_hidden_proto (cairo_matrix_translate);
-slim_hidden_proto (cairo_move_to);
-slim_hidden_proto (cairo_new_path);
-slim_hidden_proto (cairo_paint);
-slim_hidden_proto (cairo_pattern_add_color_stop_rgba);
-slim_hidden_proto (cairo_pattern_create_for_surface);
-slim_hidden_proto (cairo_pattern_create_rgb);
-slim_hidden_proto (cairo_pattern_create_rgba);
-slim_hidden_proto (cairo_pattern_destroy);
-slim_hidden_proto (cairo_pattern_get_extend);
+slim_hidden_proto (cairo_mesh_pattern_begin_patch);
 slim_hidden_proto (cairo_mesh_pattern_curve_to);
+slim_hidden_proto (cairo_mesh_pattern_end_patch);
 slim_hidden_proto (cairo_mesh_pattern_get_control_point);
 slim_hidden_proto (cairo_mesh_pattern_get_corner_color_rgba);
 slim_hidden_proto (cairo_mesh_pattern_get_patch_count);
@@ -2004,14 +2024,58 @@ slim_hidden_proto (cairo_mesh_pattern_get_path);
 slim_hidden_proto (cairo_mesh_pattern_line_to);
 slim_hidden_proto (cairo_mesh_pattern_move_to);
 slim_hidden_proto (cairo_mesh_pattern_set_corner_color_rgba);
+slim_hidden_proto (cairo_move_to);
+slim_hidden_proto (cairo_new_path);
+slim_hidden_proto (cairo_paint);
+slim_hidden_proto (cairo_paint_with_alpha);
+slim_hidden_proto_no_warn (cairo_path_destroy);
+slim_hidden_proto (cairo_pattern_add_color_stop_rgba);
+slim_hidden_proto (cairo_pattern_create_for_surface);
+slim_hidden_proto (cairo_pattern_create_linear);
+slim_hidden_proto (cairo_pattern_create_mesh);
+slim_hidden_proto (cairo_pattern_create_radial);
+slim_hidden_proto (cairo_pattern_create_rgb);
+slim_hidden_proto (cairo_pattern_create_rgba);
+slim_hidden_proto (cairo_pattern_destroy);
+slim_hidden_proto (cairo_pattern_get_extend);
+slim_hidden_proto (cairo_pattern_get_rgba);
+slim_hidden_proto (cairo_pattern_get_type);
 slim_hidden_proto_no_warn (cairo_pattern_reference);
+slim_hidden_proto (cairo_pattern_set_extend);
 slim_hidden_proto (cairo_pattern_set_matrix);
 slim_hidden_proto (cairo_pop_group);
+slim_hidden_proto (cairo_pop_group_to_source);
+slim_hidden_proto (cairo_push_group);
 slim_hidden_proto (cairo_push_group_with_content);
-slim_hidden_proto_no_warn (cairo_path_destroy);
 slim_hidden_proto (cairo_recording_surface_create);
+slim_hidden_proto (cairo_recording_surface_ink_extents);
+slim_hidden_proto (cairo_rectangle);
+slim_hidden_proto (cairo_region_contains_point);
+slim_hidden_proto (cairo_region_contains_rectangle);
+slim_hidden_proto (cairo_region_copy);
+slim_hidden_proto (cairo_region_create);
+slim_hidden_proto (cairo_region_create_rectangle);
+slim_hidden_proto (cairo_region_create_rectangles);
+slim_hidden_proto (cairo_region_destroy);
+slim_hidden_proto (cairo_region_equal);
+slim_hidden_proto (cairo_region_get_extents);
+slim_hidden_proto (cairo_region_get_rectangle);
+slim_hidden_proto (cairo_region_intersect);
+slim_hidden_proto (cairo_region_intersect_rectangle);
+slim_hidden_proto (cairo_region_is_empty);
+slim_hidden_proto (cairo_region_num_rectangles);
+slim_hidden_proto (cairo_region_reference);
+slim_hidden_proto (cairo_region_status);
+slim_hidden_proto (cairo_region_subtract);
+slim_hidden_proto (cairo_region_subtract_rectangle);
+slim_hidden_proto (cairo_region_translate);
+slim_hidden_proto (cairo_region_union);
+slim_hidden_proto (cairo_region_union_rectangle);
+slim_hidden_proto (cairo_region_xor);
+slim_hidden_proto (cairo_region_xor_rectangle);
 slim_hidden_proto (cairo_rel_line_to);
 slim_hidden_proto (cairo_restore);
+slim_hidden_proto (cairo_rotate);
 slim_hidden_proto (cairo_save);
 slim_hidden_proto (cairo_scale);
 slim_hidden_proto (cairo_scaled_font_create);
@@ -2021,23 +2085,27 @@ slim_hidden_proto (cairo_scaled_font_get_ctm);
 slim_hidden_proto (cairo_scaled_font_get_font_face);
 slim_hidden_proto (cairo_scaled_font_get_font_matrix);
 slim_hidden_proto (cairo_scaled_font_get_font_options);
+slim_hidden_proto (cairo_scaled_font_get_user_data);
 slim_hidden_proto (cairo_scaled_font_glyph_extents);
 slim_hidden_proto_no_warn (cairo_scaled_font_reference);
-slim_hidden_proto (cairo_scaled_font_status);
-slim_hidden_proto (cairo_scaled_font_get_user_data);
 slim_hidden_proto (cairo_scaled_font_set_user_data);
+slim_hidden_proto (cairo_scaled_font_status);
 slim_hidden_proto (cairo_scaled_font_text_to_glyphs);
+slim_hidden_proto (cairo_set_dash);
+slim_hidden_proto (cairo_set_fill_rule);
 slim_hidden_proto (cairo_set_font_matrix);
 slim_hidden_proto (cairo_set_font_options);
 slim_hidden_proto (cairo_set_font_size);
+slim_hidden_proto (cairo_set_hairline);
 slim_hidden_proto (cairo_set_line_cap);
 slim_hidden_proto (cairo_set_line_join);
 slim_hidden_proto (cairo_set_line_width);
-slim_hidden_proto (cairo_set_hairline);
 slim_hidden_proto (cairo_set_matrix);
+slim_hidden_proto (cairo_set_miter_limit);
 slim_hidden_proto (cairo_set_operator);
 slim_hidden_proto (cairo_set_source);
 slim_hidden_proto (cairo_set_source_rgb);
+slim_hidden_proto (cairo_set_source_rgba);
 slim_hidden_proto (cairo_set_source_surface);
 slim_hidden_proto (cairo_set_tolerance);
 slim_hidden_proto (cairo_status);
@@ -2068,43 +2136,20 @@ slim_hidden_proto (cairo_text_cluster_free);
 slim_hidden_proto (cairo_toy_font_face_create);
 slim_hidden_proto (cairo_toy_font_face_get_slant);
 slim_hidden_proto (cairo_toy_font_face_get_weight);
-slim_hidden_proto (cairo_translate);
 slim_hidden_proto (cairo_transform);
+slim_hidden_proto (cairo_translate);
 slim_hidden_proto (cairo_user_font_face_create);
 slim_hidden_proto (cairo_user_font_face_set_init_func);
 slim_hidden_proto (cairo_user_font_face_set_render_color_glyph_func);
 slim_hidden_proto (cairo_user_font_face_set_render_glyph_func);
 slim_hidden_proto (cairo_user_font_face_set_unicode_to_glyph_func);
-slim_hidden_proto (cairo_device_to_user);
 slim_hidden_proto (cairo_user_to_device);
 slim_hidden_proto (cairo_user_to_device_distance);
 slim_hidden_proto (cairo_version_string);
-slim_hidden_proto (cairo_region_create);
-slim_hidden_proto (cairo_region_create_rectangle);
-slim_hidden_proto (cairo_region_create_rectangles);
-slim_hidden_proto (cairo_region_copy);
-slim_hidden_proto (cairo_region_reference);
-slim_hidden_proto (cairo_region_destroy);
-slim_hidden_proto (cairo_region_equal);
-slim_hidden_proto (cairo_region_status);
-slim_hidden_proto (cairo_region_get_extents);
-slim_hidden_proto (cairo_region_num_rectangles);
-slim_hidden_proto (cairo_region_get_rectangle);
-slim_hidden_proto (cairo_region_is_empty);
-slim_hidden_proto (cairo_region_contains_rectangle);
-slim_hidden_proto (cairo_region_contains_point);
-slim_hidden_proto (cairo_region_translate);
-slim_hidden_proto (cairo_region_subtract);
-slim_hidden_proto (cairo_region_subtract_rectangle);
-slim_hidden_proto (cairo_region_intersect);
-slim_hidden_proto (cairo_region_intersect_rectangle);
-slim_hidden_proto (cairo_region_union);
-slim_hidden_proto (cairo_region_union_rectangle);
-slim_hidden_proto (cairo_region_xor);
-slim_hidden_proto (cairo_region_xor_rectangle);
 
 #if CAIRO_HAS_PNG_FUNCTIONS
 
+slim_hidden_proto (cairo_image_surface_create_from_png_stream);
 slim_hidden_proto (cairo_surface_write_to_png_stream);
 
 #endif

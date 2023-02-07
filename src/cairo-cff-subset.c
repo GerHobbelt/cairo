@@ -390,7 +390,7 @@ encode_index_offset (unsigned char *p, int offset_size, unsigned long offset)
     return p + offset_size;
 }
 
-static unsigned long
+static size_t
 decode_index_offset(unsigned char *p, int off_size)
 {
     unsigned long offset = 0;
@@ -412,8 +412,8 @@ cff_index_read (cairo_array_t *index, unsigned char **ptr, unsigned char *end_pt
     cff_index_element_t element;
     unsigned char *data, *p;
     cairo_status_t status;
-    int offset_size, count, start, i;
-    int end = 0;
+    int offset_size, count, i;
+    size_t start, end = 0;
 
     p = *ptr;
     if (p + 2 > end_ptr)
@@ -422,7 +422,7 @@ cff_index_read (cairo_array_t *index, unsigned char **ptr, unsigned char *end_pt
     p += 2;
     if (count > 0) {
         offset_size = *p++;
-        if (p + (count + 1)*offset_size > end_ptr)
+        if (p + (count + 1)*offset_size > end_ptr || offset_size > 4)
             return CAIRO_INT_STATUS_UNSUPPORTED;
         data = p + offset_size*(count + 1) - 1;
         start = decode_index_offset (p, offset_size);
@@ -430,7 +430,7 @@ cff_index_read (cairo_array_t *index, unsigned char **ptr, unsigned char *end_pt
         for (i = 0; i < count; i++) {
             end = decode_index_offset (p, offset_size);
             p += offset_size;
-            if (p > end_ptr)
+            if (p > end_ptr || end < start || data + end > end_ptr)
                 return CAIRO_INT_STATUS_UNSUPPORTED;
             element.length = end - start;
             element.is_copy = FALSE;
@@ -875,7 +875,7 @@ cairo_cff_font_read_name (cairo_cff_font_t *font)
 
     cff_index_init (&index);
     status = cff_index_read (&index, &font->current_ptr, font->data_end);
-    if (!font->is_opentype) {
+    if (status == CAIRO_INT_STATUS_SUCCESS && !font->is_opentype) {
         element = _cairo_array_index (&index, 0);
 	p = element->data;
 	len = element->length;
@@ -890,12 +890,10 @@ cairo_cff_font_read_name (cairo_cff_font_t *font)
 		len -= 7;
 	    }
 	}
-        font->ps_name = _cairo_malloc (len + 1);
-        if (unlikely (font->ps_name == NULL))
-            return _cairo_error (CAIRO_STATUS_NO_MEMORY);
 
-        memcpy (font->ps_name, p, len);
-        font->ps_name[len] = 0;
+	font->ps_name = _cairo_strndup ((char*)p, len);
+	if (unlikely (font->ps_name == NULL))
+	    return _cairo_error (CAIRO_STATUS_NO_MEMORY);
 
         status = _cairo_escape_ps_name (&font->ps_name);
     }

@@ -157,9 +157,7 @@ typedef struct _cairo_surface cairo_surface_t;
  *
  * A #cairo_device_t represents the driver interface for drawing
  * operations to a #cairo_surface_t.  There are different subtypes of
- * #cairo_device_t for different drawing backends; for example,
- * cairo_egl_device_create() creates a device that wraps an EGL display and
- * context.
+ * #cairo_device_t for different drawing backends.
  *
  * The type of a device can be queried with cairo_device_get_type().
  *
@@ -358,6 +356,7 @@ typedef enum _cairo_status {
     CAIRO_STATUS_WIN32_GDI_ERROR,
     CAIRO_STATUS_TAG_ERROR,
     CAIRO_STATUS_DWRITE_ERROR,
+    CAIRO_STATUS_SVG_FONT_ERROR,
 
     CAIRO_STATUS_LAST_STATUS
 } cairo_status_t;
@@ -477,7 +476,7 @@ typedef cairo_status_t (*cairo_read_func_t) (void		*closure,
 /**
  * cairo_rectangle_int_t:
  * @x: X coordinate of the left side of the rectangle
- * @y: Y coordinate of the the top side of the rectangle
+ * @y: Y coordinate of the top side of the rectangle
  * @width: width of the rectangle
  * @height: height of the rectangle
  *
@@ -1000,7 +999,7 @@ cairo_clip_extents (cairo_t *cr,
 /**
  * cairo_rectangle_t:
  * @x: X coordinate of the left side of the rectangle
- * @y: Y coordinate of the the top side of the rectangle
+ * @y: Y coordinate of the top side of the rectangle
  * @width: width of the rectangle
  * @height: height of the rectangle
  *
@@ -1379,7 +1378,7 @@ typedef enum _cairo_hint_metrics {
  * contains a color presentation for a glyph, and when supported by
  * the font backend, the glyph will be rendered in color, since 1.18.
  *
- * Specifies if color fonts are to be rendered using the the color
+ * Specifies if color fonts are to be rendered using the color
  * glyphs or outline glyphs. Glyphs that do not have a color
  * presentation, and non-color fonts are not affected by this font
  * option.
@@ -1485,8 +1484,20 @@ cairo_public void
 cairo_font_options_set_color_palette (cairo_font_options_t *options,
                                       unsigned int          palette_index);
 
+cairo_public void
+cairo_font_options_set_custom_palette_color (cairo_font_options_t *options,
+                                             unsigned int index,
+                                             double red, double green,
+                                             double blue, double alpha);
+
+cairo_public cairo_status_t
+cairo_font_options_get_custom_palette_color (cairo_font_options_t *options,
+                                             unsigned int index,
+                                             double *red, double *green,
+                                             double *blue, double *alpha);
+
 /* This interface is for dealing with text as text, not caring about the
-   font object inside the the cairo_t. */
+   font object inside the cairo_t. */
 
 cairo_public void
 cairo_select_font_face (cairo_t              *cr,
@@ -1802,25 +1813,14 @@ typedef cairo_status_t (*cairo_user_scaled_font_init_func_t) (cairo_scaled_font_
  * cairo_user_font_face_set_render_glyph_func(), the result is
  * undefined if any source other than the default source on @cr is
  * used.  That means, glyph bitmaps should be rendered using
- * cairo_mask() instead of cairo_paint(). When this callback is set with
- * cairo_user_font_face_set_render_color_glyph_func(), setting the
- * source is a valid operation.
+ * cairo_mask() instead of cairo_paint().
  *
  * When this callback is set with
  * cairo_user_font_face_set_render_color_glyph_func(), the default
- * source is the current source color of the context that is rendering
- * the user font. That is, the same color a non-color user font will
- * be rendered in. In most cases the callback will want to set a
- * specific color. If the callback wishes to use the current context
- * color after using another source, it should retain a reference to
- * the source or use cairo_save()/cairo_restore() prior to changing
- * the source. Note that the default source contains an internal
- * marker to indicate that it is to be substituted with the current
- * context source color when rendered to a surface. Querying the
- * default source pattern will reveal a solid black color, however
- * this is not representative of the color that will actually be
- * used. Similarly, setting a solid black color will render black, not
- * the current context source when the glyph is painted to a surface.
+ * source is black. Setting the source is a valid
+ * operation. cairo_user_scaled_font_get_foreground_marker() or
+ * cairo_user_scaled_font_get_foreground_source() may be called to
+ * obtain the current source at the time the glyph is rendered.
  *
  * Other non-default settings on @cr include a font size of 1.0 (given that
  * it is set up to be in font space), and font options corresponding to
@@ -1843,10 +1843,13 @@ typedef cairo_status_t (*cairo_user_scaled_font_init_func_t) (cairo_scaled_font_
  * Where both color and non-color callbacks has been set using
  * cairo_user_font_face_set_render_color_glyph_func(), and
  * cairo_user_font_face_set_render_glyph_func(), the color glyph
- * callback may return %CAIRO_STATUS_USER_FONT_NOT_IMPLEMENTED if the
- * glyph is not a color glyph. This is the only case in which the
- * %CAIRO_STATUS_USER_FONT_NOT_IMPLEMENTED may be returned from a
- * render callback.
+ * callback will be called first. If the color glyph callback returns
+ * %CAIRO_STATUS_USER_FONT_NOT_IMPLEMENTED, any drawing operations are
+ * discarded and the non-color callback will be called. This is the
+ * only case in which the %CAIRO_STATUS_USER_FONT_NOT_IMPLEMENTED may
+ * be returned from a render callback. This fallback sequence allows a
+ * user font face to contain a combination of both color and non-color
+ * glyphs.
  *
  * Returns: %CAIRO_STATUS_SUCCESS upon success,
  * %CAIRO_STATUS_USER_FONT_NOT_IMPLEMENTED if fallback options should be tried,
@@ -2014,6 +2017,11 @@ cairo_user_font_face_get_text_to_glyphs_func (cairo_font_face_t *font_face);
 cairo_public cairo_user_scaled_font_unicode_to_glyph_func_t
 cairo_user_font_face_get_unicode_to_glyph_func (cairo_font_face_t *font_face);
 
+cairo_public cairo_pattern_t *
+cairo_user_scaled_font_get_foreground_marker (cairo_scaled_font_t *scaled_font);
+
+cairo_public cairo_pattern_t *
+cairo_user_scaled_font_get_foreground_source (cairo_scaled_font_t *scaled_font);
 
 /* Query functions */
 

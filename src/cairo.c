@@ -372,7 +372,8 @@ static const cairo_t _cairo_nil[] = {
     DEFINE_NIL_CONTEXT (CAIRO_STATUS_FREETYPE_ERROR),
     DEFINE_NIL_CONTEXT (CAIRO_STATUS_WIN32_GDI_ERROR),
     DEFINE_NIL_CONTEXT (CAIRO_STATUS_TAG_ERROR),
-    DEFINE_NIL_CONTEXT (CAIRO_STATUS_DWRITE_ERROR)
+    DEFINE_NIL_CONTEXT (CAIRO_STATUS_DWRITE_ERROR),
+    DEFINE_NIL_CONTEXT (CAIRO_STATUS_SVG_FONT_ERROR)
 };
 COMPILE_TIME_ASSERT (ARRAY_LENGTH (_cairo_nil) == CAIRO_STATUS_LAST_STATUS - 1);
 
@@ -706,6 +707,7 @@ cairo_push_group (cairo_t *cr)
 {
     cairo_push_group_with_content (cr, CAIRO_CONTENT_COLOR_ALPHA);
 }
+slim_hidden_def (cairo_push_group);
 
 /**
  * cairo_push_group_with_content:
@@ -813,6 +815,7 @@ cairo_pop_group_to_source (cairo_t *cr)
     cairo_set_source (cr, group_pattern);
     cairo_pattern_destroy (group_pattern);
 }
+slim_hidden_def (cairo_pop_group_to_source);
 
 /**
  * cairo_set_operator:
@@ -918,6 +921,8 @@ slim_hidden_def (cairo_set_source_rgb);
  * range 0 to 1. If the values passed in are outside that range, they
  * will be clamped.
  *
+ * Note that the color and alpha values are not premultiplied.
+ *
  * The default source pattern is opaque black, (that is, it is
  * equivalent to cairo_set_source_rgba(cr, 0.0, 0.0, 0.0, 1.0)).
  *
@@ -937,6 +942,7 @@ cairo_set_source_rgba (cairo_t *cr,
     if (unlikely (status))
 	_cairo_set_error (cr, status);
 }
+slim_hidden_def (cairo_set_source_rgba);
 
 /**
  * cairo_set_source_surface:
@@ -1050,6 +1056,7 @@ cairo_get_source (cairo_t *cr)
 
     return cr->backend->get_source (cr);
 }
+slim_hidden_def (cairo_get_source);
 
 /**
  * cairo_set_tolerance:
@@ -1338,6 +1345,7 @@ cairo_set_dash (cairo_t	     *cr,
     if (unlikely (status))
 	_cairo_set_error (cr, status);
 }
+slim_hidden_def (cairo_set_dash);
 
 /**
  * cairo_get_dash_count:
@@ -1512,6 +1520,7 @@ cairo_rotate (cairo_t *cr, double angle)
     if (unlikely (status))
 	_cairo_set_error (cr, status);
 }
+slim_hidden_def (cairo_rotate);
 
 /**
  * cairo_transform:
@@ -1587,6 +1596,7 @@ cairo_identity_matrix (cairo_t *cr)
     if (unlikely (status))
 	_cairo_set_error (cr, status);
 }
+slim_hidden_def (cairo_identity_matrix);
 
 /**
  * cairo_user_to_device:
@@ -1901,6 +1911,7 @@ cairo_arc (cairo_t *cr,
     if (unlikely (status))
 	_cairo_set_error (cr, status);
 }
+slim_hidden_def (cairo_arc);
 
 /**
  * cairo_arc_negative:
@@ -1946,6 +1957,7 @@ cairo_arc_negative (cairo_t *cr,
     if (unlikely (status))
 	_cairo_set_error (cr, status);
 }
+slim_hidden_def (cairo_arc_negative);
 
 /* XXX: NYI
 void
@@ -2128,6 +2140,7 @@ cairo_rectangle (cairo_t *cr,
     if (unlikely (status))
 	_cairo_set_error (cr, status);
 }
+slim_hidden_def (cairo_rectangle);
 
 #if 0
 /* XXX: NYI */
@@ -2288,6 +2301,7 @@ cairo_paint_with_alpha (cairo_t *cr,
     if (unlikely (status))
 	_cairo_set_error (cr, status);
 }
+slim_hidden_def (cairo_paint_with_alpha);
 
 /**
  * cairo_mask:
@@ -2463,6 +2477,7 @@ cairo_fill (cairo_t *cr)
     if (unlikely (status))
 	_cairo_set_error (cr, status);
 }
+slim_hidden_def (cairo_fill);
 
 /**
  * cairo_fill_preserve:
@@ -2754,6 +2769,7 @@ cairo_clip (cairo_t *cr)
     if (unlikely (status))
 	_cairo_set_error (cr, status);
 }
+slim_hidden_def (cairo_clip);
 
 /**
  * cairo_clip_preserve:
@@ -2860,6 +2876,7 @@ cairo_clip_extents (cairo_t *cr,
     if (unlikely (status))
 	_cairo_set_error (cr, status);
 }
+slim_hidden_def (cairo_clip_extents);
 
 /**
  * cairo_in_clip:
@@ -4004,6 +4021,7 @@ cairo_has_current_point (cairo_t *cr)
 
     return cr->backend->has_current_point (cr);
 }
+slim_hidden_def (cairo_has_current_point);
 
 /**
  * cairo_get_current_point:
@@ -4074,6 +4092,7 @@ cairo_get_fill_rule (cairo_t *cr)
 
     return cr->backend->get_fill_rule (cr);
 }
+slim_hidden_def (cairo_set_fill_rule);
 
 /**
  * cairo_get_line_width:
@@ -4174,6 +4193,7 @@ cairo_get_miter_limit (cairo_t *cr)
 
     return cr->backend->get_miter_limit (cr);
 }
+slim_hidden_def (cairo_set_miter_limit);
 
 /**
  * cairo_get_matrix:
@@ -4289,6 +4309,7 @@ cairo_copy_path (cairo_t *cr)
 
     return cr->backend->copy_path (cr);
 }
+slim_hidden_def (cairo_copy_path);
 
 /**
  * cairo_copy_path_flat:
@@ -4383,6 +4404,7 @@ cairo_append_path (cairo_t		*cr,
     if (unlikely (status))
 	_cairo_set_error (cr, status);
 }
+slim_hidden_def (cairo_append_path);
 
 /**
  * cairo_status:

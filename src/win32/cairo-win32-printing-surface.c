@@ -35,15 +35,6 @@
  *      Vladimir Vukicevic <vladimir@pobox.com>
  */
 
-#define WIN32_LEAN_AND_MEAN
-/* We require Windows 2000 features such as ETO_PDY */
-#if !defined(WINVER) || (WINVER < 0x0500)
-# define WINVER 0x0500
-#endif
-#if !defined(_WIN32_WINNT) || (_WIN32_WINNT < 0x0500)
-# define _WIN32_WINNT 0x0500
-#endif
-
 #include "cairoint.h"
 
 #include "cairo-default-context-private.h"
@@ -663,6 +654,7 @@ _cairo_win32_printing_surface_paint_recording_pattern (cairo_win32_printing_surf
 
 	    SaveDC (surface->win32.dc); /* Allow clip path to be reset during replay */
 	    status = _cairo_recording_surface_replay_region (&recording_surface->base,
+							     pattern->region_array_id,
 							     is_subsurface ? &recording_extents : NULL,
 							     &surface->win32.base,
 							     CAIRO_RECORDING_REGION_NATIVE);
@@ -2161,6 +2153,9 @@ _cairo_win32_printing_surface_supports_fine_grained_fallbacks (void *abstract_su
  * The returned surface will be wrapped using the paginated surface to
  * provide correct complex rendering behaviour; cairo_surface_show_page() and
  * associated methods must be used for correct output.
+ *
+ * The following mime types are supported on source patterns:
+ * %CAIRO_MIME_TYPE_JPEG, %CAIRO_MIME_TYPE_PNG.
  *
  * Return value: the newly created surface
  *

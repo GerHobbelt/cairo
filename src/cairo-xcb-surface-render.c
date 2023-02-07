@@ -1112,7 +1112,8 @@ record_to_picture (cairo_surface_t *target,
 
     status = _cairo_recording_surface_replay_with_clip (source,
 							&matrix, tmp,
-							NULL);
+							NULL,
+                                                        FALSE);
     if (unlikely (status)) {
 	cairo_surface_destroy (tmp);
 	return (cairo_xcb_picture_t *) _cairo_surface_create_in_error (status);
@@ -1242,12 +1243,6 @@ _cairo_xcb_surface_picture (cairo_xcb_surface_t *target,
 	}
     }
 #endif
-#if CAIRO_HAS_GL_FUNCTIONS
-    else if (source->type == CAIRO_SURFACE_TYPE_GL)
-    {
-	/* pixmap from texture */
-    }
-#endif
     else if (source->type == CAIRO_SURFACE_TYPE_RECORDING)
     {
 	/* We have to skip the call to attach_snapshot() because we possibly
@@ -1266,7 +1261,8 @@ _cairo_xcb_surface_picture (cairo_xcb_surface_t *target,
 	if (unlikely (status))
 	    return (cairo_xcb_picture_t *) _cairo_surface_create_in_error (status);
 
-	if (image->format != CAIRO_FORMAT_INVALID) {
+	if (image->format != CAIRO_FORMAT_INVALID &&
+	    image->format < ARRAY_LENGTH (target->screen->connection->standard_formats)) {
 	    xcb_render_pictformat_t format;
 
 	    format = target->screen->connection->standard_formats[image->format];

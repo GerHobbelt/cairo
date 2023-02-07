@@ -134,7 +134,9 @@ const cairo_surface_t name = {					\
       CAIRO_HINT_STYLE_DEFAULT,		/* hint_style */	\
       CAIRO_HINT_METRICS_DEFAULT,	/* hint_metrics */	\
       CAIRO_ROUND_GLYPH_POS_DEFAULT	/* round_glyph_positions */	\
-    }					/* font_options */	\
+    },					/* font_options */		\
+    NULL,                               /* foreground_source */		\
+    FALSE,                              /* foreground_used */   \
 }
 
 /* XXX error object! */
@@ -439,6 +441,9 @@ _cairo_surface_init (cairo_surface_t			*surface,
     surface->snapshot_of = NULL;
 
     surface->has_font_options = FALSE;
+
+    surface->foreground_source = NULL;
+    surface->foreground_used = FALSE;
 }
 
 static void
@@ -975,6 +980,9 @@ cairo_surface_destroy (cairo_surface_t *surface)
 
     _cairo_user_data_array_fini (&surface->user_data);
     _cairo_user_data_array_fini (&surface->mime_data);
+
+    if (surface->foreground_source)
+	cairo_pattern_destroy (surface->foreground_source);
 
     if (surface->owns_device)
         cairo_device_destroy (surface->device);
@@ -1774,7 +1782,7 @@ slim_hidden_def (cairo_surface_mark_dirty_rectangle);
  * by the CTM when drawing to @surface. One common use for this is to
  * render to very high resolution display devices at a scale factor, so
  * that code that assumes 1 pixel will be a certain size will still work.
- * Setting a transformation via cairo_translate() isn't
+ * Setting a transformation via cairo_scale() isn't
  * sufficient to do this, since functions like
  * cairo_device_to_user() will expose the hidden scale.
  *
@@ -1826,7 +1834,7 @@ slim_hidden_def (cairo_surface_set_device_scale);
  * @x_scale: the scale in the X direction, in device units
  * @y_scale: the scale in the Y direction, in device units
  *
- * This function returns the previous device offset set by
+ * This function returns the previous device scale set by
  * cairo_surface_set_device_scale().
  *
  * Since: 1.14
@@ -2196,6 +2204,11 @@ _cairo_surface_paint (cairo_surface_t		*surface,
     if (unlikely (status))
 	return status;
 
+    if (source->is_foreground_marker && surface->foreground_source) {
+	source = surface->foreground_source;
+	surface->foreground_used = TRUE;
+    }
+
     status = surface->backend->paint (surface, op, source, clip);
     is_clear = op == CAIRO_OPERATOR_CLEAR && clip == NULL;
     if (status != CAIRO_INT_STATUS_NOTHING_TO_DO || is_clear) {
@@ -2245,6 +2258,11 @@ _cairo_surface_mask (cairo_surface_t		*surface,
     status = _cairo_surface_begin_modification (surface);
     if (unlikely (status))
 	return status;
+
+    if (source->is_foreground_marker && surface->foreground_source) {
+	source = surface->foreground_source;
+	surface->foreground_used = TRUE;
+    }
 
     status = surface->backend->mask (surface, op, source, mask, clip);
     if (status != CAIRO_INT_STATUS_NOTHING_TO_DO) {
@@ -2301,6 +2319,16 @@ _cairo_surface_fill_stroke (cairo_surface_t	    *surface,
     status = _cairo_surface_begin_modification (surface);
     if (unlikely (status))
 	return status;
+
+    if (fill_source->is_foreground_marker && surface->foreground_source) {
+	fill_source = surface->foreground_source;
+	surface->foreground_used = TRUE;
+    }
+
+    if (stroke_source->is_foreground_marker && surface->foreground_source) {
+	stroke_source = surface->foreground_source;
+	surface->foreground_used = TRUE;
+    }
 
     if (surface->backend->fill_stroke) {
 	cairo_matrix_t dev_ctm = *stroke_ctm;
@@ -2376,6 +2404,11 @@ _cairo_surface_stroke (cairo_surface_t			*surface,
     if (unlikely (status))
 	return status;
 
+    if (source->is_foreground_marker && surface->foreground_source) {
+	source = surface->foreground_source;
+	surface->foreground_used = TRUE;
+    }
+
     status = surface->backend->stroke (surface, op, source,
 				       path, stroke_style,
 				       ctm, ctm_inverse,
@@ -2420,6 +2453,11 @@ _cairo_surface_fill (cairo_surface_t		*surface,
     status = _cairo_surface_begin_modification (surface);
     if (unlikely (status))
 	return status;
+
+    if (source->is_foreground_marker && surface->foreground_source) {
+	source = surface->foreground_source;
+	surface->foreground_used = TRUE;
+    }
 
     status = surface->backend->fill (surface, op, source,
 				     path, fill_rule,
@@ -2719,6 +2757,7 @@ composite_color_glyphs (cairo_surface_t             *surface,
 	font_face = cairo_scaled_font_get_font_face (scaled_font);
 	cairo_scaled_font_get_font_matrix (scaled_font, &font_matrix);
 	cairo_scaled_font_get_ctm (scaled_font, &ctm);
+	_cairo_font_options_init_default (&font_options);
 	cairo_scaled_font_get_font_options (scaled_font, &font_options);
 	cairo_matrix_scale (&ctm, x_scale, y_scale);
 	scaled_font = cairo_scaled_font_create (font_face,
@@ -2894,12 +2933,19 @@ _cairo_surface_show_text_glyphs (cairo_surface_t	    *surface,
     if (unlikely (status))
 	return status;
 
-    if (nothing_to_do (surface, op, source))
-	return CAIRO_STATUS_SUCCESS;
+    if (!(_cairo_scaled_font_has_color_glyphs (scaled_font) &&
+	  scaled_font->options.color_mode != CAIRO_COLOR_MODE_NO_COLOR))
+    {
+        if (nothing_to_do (surface, op, source))
+	    return CAIRO_STATUS_SUCCESS;
+    }
 
     status = _cairo_surface_begin_modification (surface);
     if (unlikely (status))
 	return status;
+
+    if (source->is_foreground_marker && surface->foreground_source)
+	source = surface->foreground_source;
 
     if (_cairo_scaled_font_has_color_glyphs (scaled_font) &&
 	scaled_font->options.color_mode != CAIRO_COLOR_MODE_NO_COLOR)
@@ -3110,6 +3156,7 @@ _cairo_surface_create_in_error (cairo_status_t status)
     case CAIRO_STATUS_WIN32_GDI_ERROR:
     case CAIRO_INT_STATUS_DWRITE_ERROR:
     case CAIRO_STATUS_TAG_ERROR:
+    case CAIRO_STATUS_SVG_FONT_ERROR:
     default:
 	_cairo_error_throw (CAIRO_STATUS_NO_MEMORY);
 	return (cairo_surface_t *) &_cairo_surface_nil;

@@ -130,6 +130,8 @@ cairo_feature_sources = {
   ],
   'cairo-ft': [
     'cairo-ft-font.c',
+    'cairo-colr-glyph-render.c',
+    'cairo-svg-glyph-render.c'
   ],
 
   'cairo-xlib': [
@@ -177,24 +179,8 @@ cairo_feature_sources = {
   'cairo-win32-font': [
     'win32/cairo-win32-font.c',
   ],
-  'cairo-win32-dwrite-font': [
-    'win32/cairo-dwrite-font-public.c',
+  'cairo-dwrite-font': [
     'win32/cairo-dwrite-font.cpp',
-  ],
-  'cairo-gl': [
-    'cairo-gl-composite.c',
-    'cairo-gl-device.c',
-    'cairo-gl-dispatch.c',
-    'cairo-gl-glyphs.c',
-    'cairo-gl-gradient.c',
-    'cairo-gl-info.c',
-    'cairo-gl-msaa-compositor.c',
-    'cairo-gl-operand.c',
-    'cairo-gl-shaders.c',
-    'cairo-gl-source.c',
-    'cairo-gl-spans-compositor.c',
-    'cairo-gl-surface.c',
-    'cairo-gl-traps-compositor.c',
   ],
   'cairo-script': [
     'cairo-script-surface.c',
@@ -208,15 +194,6 @@ cairo_feature_sources = {
   ],
   'cairo-svg': [
     'cairo-svg-surface.c',
-  ],
-  'cairo-egl': [
-    'cairo-egl-context.c',
-  ],
-  'cairo-glx': [
-    'cairo-glx-context.c',
-  ],
-  'cairo-wgl': [
-    'cairo-wgl-context.c',
   ],
   'cairo-xml': [
     'cairo-xml-surface.c',
@@ -237,6 +214,7 @@ cairo_feature_headers = {
   'cairo-quartz': ['cairo-quartz.h'],
   'cairo-quartz-image': ['cairo-quartz-image.h'],
   'cairo-win32': ['cairo-win32.h'],
+  'cairo-dwrite-font': ['cairo-dwrite.h'],
   'cairo-gl': ['cairo-gl.h'],
   'cairo-script': ['cairo-script.h'],
   'cairo-tee': ['cairo-tee.h'],
@@ -277,7 +255,8 @@ libcairo = library('cairo', cairo_sources,
   include_directories: incbase,
 )
 
-cairo_headers += [configure_file(output: 'cairo-features.h', configuration: feature_conf)]
+cairo_features_file = configure_file(output: 'cairo-features.h', configuration: feature_conf)
+cairo_headers += [cairo_features_file]
 
 libcairo_dep = declare_dependency(link_with: libcairo,
   dependencies: deps,
@@ -297,9 +276,6 @@ install_headers(cairo_headers, subdir: 'cairo')
 shell = find_program('sh', required: false)
 if shell.found()
   test_scripts = [
-    # This script calls back into make to generate cairo.def
-    # TODO: Make this work, somehow
-    #'check-def.sh',
     'check-doc-syntax.sh',
     'check-headers.sh',
     'check-preprocessor-syntax.sh',
@@ -314,6 +290,21 @@ if shell.found()
 
   env = environment()
   env.set('CAIRO_HAS_HIDDEN_SYMBOLS', '1')
+
+  cairo_def = custom_target('make-cairo-def',
+                            input : cairo_headers,
+                            output : 'cairo.def',
+                            command : [ shell,
+                                        meson.current_source_dir()/'make-cairo-def.sh',
+                                        '@OUTPUT@',
+                                        cairo_features_file,
+                                        '@INPUT@'
+                                      ])
+
+  test('check-def', shell,
+       args: ['meson-check-def.sh', cairo_def, libcairo ],
+       env: env,
+       workdir: meson.current_source_dir())
 
   test('check-plt.sh', shell,
     args: ['check-plt.sh', libcairo ],

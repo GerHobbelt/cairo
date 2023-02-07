@@ -176,6 +176,8 @@ cairo_status_to_string (cairo_status_t status)
 	return "invalid tag name, attributes, or nesting";
     case CAIRO_STATUS_DWRITE_ERROR:
 	return "Window Direct Write error";
+    case CAIRO_STATUS_SVG_FONT_ERROR:
+	return "error occured while rendering an OpenType-SVG font";
     default:
     case CAIRO_STATUS_LAST_STATUS:
 	return "<unknown error status>";
@@ -888,6 +890,33 @@ _cairo_strtod (const char *nptr, char **endptr)
 }
 #endif
 
+#ifndef HAVE_STRNDUP
+char *
+_cairo_strndup (const char *s, size_t n)
+{
+    const char *end;
+    size_t len;
+    char *sdup;
+
+    if (s == NULL)
+	return NULL;
+
+    end = memchr (s, 0, n);
+    if (end)
+	len = end - s;
+    else
+	len = n;
+
+    sdup = (char *) _cairo_malloc (len + 1);
+    if (sdup != NULL) {
+	memcpy (sdup, s, len);
+	sdup[len] = '\0';
+    }
+
+    return sdup;
+}
+#endif
+
 /**
  * _cairo_fopen:
  * @filename: filename to open
@@ -948,15 +977,6 @@ _cairo_fopen (const char *filename, const char *mode, FILE **file_out)
 }
 
 #ifdef _WIN32
-
-#define WIN32_LEAN_AND_MEAN
-/* We require Windows 2000 features such as ETO_PDY */
-#if !defined(WINVER) || (WINVER < 0x0500)
-# define WINVER 0x0500
-#endif
-#if !defined(_WIN32_WINNT) || (_WIN32_WINNT < 0x0500)
-# define _WIN32_WINNT 0x0500
-#endif
 
 #include <windows.h>
 #include <io.h>

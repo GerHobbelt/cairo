@@ -1882,7 +1882,7 @@ _emit_path_boxes (cairo_script_surface_t *surface,
 
     if (! _cairo_path_fixed_iter_at_end (&iter)) {
 	_cairo_boxes_fini (&boxes);
-	return CAIRO_STATUS_INVALID_PATH_DATA;
+	return CAIRO_INT_STATUS_UNSUPPORTED;
     }
 
     for (chunk = &boxes.chunks; chunk; chunk = chunk->next) {
@@ -2110,6 +2110,16 @@ _device_flush (void *abstract_device)
     cairo_script_context_t *ctx = abstract_device;
 
     return _cairo_output_stream_flush (ctx->stream);
+}
+
+static void
+_device_finish (void *abstract_device)
+{
+    cairo_script_context_t *ctx = abstract_device;
+
+    cairo_status_t status = _cairo_output_stream_close (ctx->stream);
+    status = _cairo_device_set_error (&ctx->base, status);
+    (void) status;
 }
 
 static void
@@ -2499,7 +2509,7 @@ _cairo_script_surface_paint (void			*abstract_surface,
 
     if (_cairo_surface_wrapper_is_active (&surface->wrapper)) {
 	return _cairo_surface_wrapper_paint (&surface->wrapper,
-					     op, source, clip);
+					     op, source, 0, clip);
     }
 
     return CAIRO_STATUS_SUCCESS;
@@ -2556,7 +2566,7 @@ _cairo_script_surface_mask (void			*abstract_surface,
 
     if (_cairo_surface_wrapper_is_active (&surface->wrapper)) {
 	return _cairo_surface_wrapper_mask (&surface->wrapper,
-					    op, source, mask, clip);
+					    op, source, 0, mask, 0, clip);
     }
 
     return CAIRO_STATUS_SUCCESS;
@@ -2643,7 +2653,7 @@ _cairo_script_surface_stroke (void				*abstract_surface,
 
     if (_cairo_surface_wrapper_is_active (&surface->wrapper)) {
 	return _cairo_surface_wrapper_stroke (&surface->wrapper,
-					      op, source, path,
+					      op, source, 0, path,
 					      style,
 					      ctm, ctm_inverse,
 					      tolerance, antialias,
@@ -2724,7 +2734,7 @@ _cairo_script_surface_fill (void			*abstract_surface,
 
     if (_cairo_surface_wrapper_is_active (&surface->wrapper)) {
 	return _cairo_surface_wrapper_fill (&surface->wrapper,
-					    op, source, path,
+					    op, source, 0, path,
 					    fill_rule,
 					    tolerance,
 					    antialias,
@@ -3034,6 +3044,7 @@ _emit_scaled_font (cairo_script_surface_t *surface,
 	if (unlikely (status))
 	    return status;
 
+	_cairo_font_options_init_default (&options);
 	cairo_scaled_font_get_font_options (scaled_font, &options);
 	status = _emit_font_options (surface, &options);
 	if (unlikely (status))
@@ -3575,7 +3586,7 @@ _cairo_script_surface_show_text_glyphs (void			    *abstract_surface,
 
     if (_cairo_surface_wrapper_is_active (&surface->wrapper)){
 	return _cairo_surface_wrapper_show_text_glyphs (&surface->wrapper,
-							op, source,
+							op, source, 0,
 							utf8, utf8_len,
 							glyphs, num_glyphs,
 							clusters, num_clusters,
@@ -3731,7 +3742,7 @@ static const cairo_device_backend_t _cairo_script_device_backend = {
     NULL, NULL, /* lock, unlock */
 
     _device_flush,  /* flush */
-    NULL,  /* finish */
+    _device_finish,  /* finish */
     _device_destroy
 };
 

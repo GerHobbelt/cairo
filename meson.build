@@ -97,9 +97,6 @@ endif
 
 add_project_arguments('-D_GNU_SOURCE', language: 'c')
 
-# Autotools compatibility
-add_project_arguments('-DHAVE_CONFIG_H', language: 'c')
-
 # Make sure source directory hasn't been configured with autotools
 fs = import('fs')
 if fs.exists('config.h') or fs.exists('src/cairo-features.h') or fs.exists('src/cairo-supported-features.h')
@@ -302,6 +299,8 @@ if fontconfig_dep.found()
   }]
 endif
 
+ttx = find_program('ttx', required: false)
+
 freetype_dep = dependency('freetype2',
   required: get_option('freetype'),
   version: freetype_required_version,
@@ -336,6 +335,17 @@ if freetype_dep.found()
   else
     if not cc.links(files('meson-cc-tests/ft_has_color.c'), dependencies: freetype_dep, name: 'FT has color')
       conf.set('FT_HAS_COLOR', '(0)')
+    endif
+    if cc.has_type('FT_SVG_Document', dependencies: freetype_dep, prefix: '#include <freetype/otsvg.h>')
+      conf.set('HAVE_FT_SVG_DOCUMENT', 1)
+      if ttx.found()
+        conf.set('CAIRO_CAN_TEST_TTX_FONT', 1)
+      endif
+    endif
+    # When FT COLRv1 API is no longer experimental we can change this to a
+    # version check for the stable COLRv1 API.
+    if cc.get_define('DEBUG_ENABLE_COLR_V1') != ''
+      conf.set('HAVE_FT_COLR_V1', 1)
     endif
     check_funcs += ft_check_funcs
     deps += [freetype_dep]
@@ -482,6 +492,8 @@ if host_machine.system() == 'darwin' and not get_option('quartz').disabled()
 endif
 
 if host_machine.system() == 'windows'
+  add_project_arguments('-DWIN32_LEAN_AND_MEAN', '-DNOMINMAX', language: ['c', 'cpp'])
+
   win32_extra_deps = [
     cc.find_library('gdi32'),
     cc.find_library('msimg32'),
@@ -506,19 +518,19 @@ if host_machine.system() == 'windows'
   ]
 
   cpp_compiler = meson.get_compiler('cpp')
-  d2d_dep = cpp_compiler.find_library('d2d1', required: false)
-  dwrite_dep = cpp_compiler.find_library('dwrite', required: false)
+  d2d_dep = cpp_compiler.find_library('d2d1', required: get_option('dwrite'))
+  dwrite_dep = cpp_compiler.find_library('dwrite', required: get_option('dwrite'))
   d2d_header = cpp_compiler.has_header('d2d1.h')
   d2d_3_header = cpp_compiler.has_header('d2d1_3.h')
   dwrite_header = cpp_compiler.has_header('dwrite.h')
   dwrite_3_header = cpp_compiler.has_header('dwrite_3.h')
-  wincodec_dep = cpp_compiler.find_library('windowscodecs', required: false)
+  wincodec_dep = cpp_compiler.find_library('windowscodecs', required: get_option('dwrite'))
   wincodec_header = cpp_compiler.has_header('wincodec.h')
 
   if d2d_dep.found() and dwrite_dep.found() and d2d_header and dwrite_header and wincodec_dep.found() and wincodec_header
     feature_conf.set('CAIRO_HAS_DWRITE_FONT', 1)
     built_features += [{
-      'name': 'cairo-win32-dwrite-font',
+      'name': 'cairo-dwrite-font',
       'description': 'Microsoft Windows DWrite font backend',
       'deps': [dwrite_dep, d2d_dep, wincodec_dep],
     }]
@@ -532,135 +544,10 @@ if host_machine.system() == 'windows'
     if cpp_compiler.has_header('dwrite_3.h') and cpp_compiler.get_define('__MINGW32__') == ''
       conf.set('HAVE_DWRITE_3_H', 1)
     endif
-  endif
-endif
 
-# GL / GLESV2 / GLESV3 are mutually exclusive
-gl_backend = get_option('gl-backend')
-need_egl_functions = false
-need_wgl_functions = false
-need_glx_functions = false
-
-if gl_backend in ['auto', 'gl']
-  gl_dep = dependency('gl', required: false)
-  if not gl_dep.found()
-    gl_dep = cc.find_library('GL', required: gl_backend == 'gl')
-  endif
-  if gl_dep.found() and \
-     cc.has_header('GL/gl.h', required: gl_backend == 'gl', dependencies: gl_dep) and \
-     cc.has_header('GL/glext.h', required: gl_backend == 'gl', dependencies: gl_dep)
-    deps += [gl_dep]
-
-    need_egl_functions = true
-    need_wgl_functions = true
-    need_glx_functions = true
-
-    feature_conf.set('CAIRO_HAS_GL_SURFACE', 1)
-    built_features += [{
-      'name': 'cairo-gl',
-      'description': 'OpenGL surface backend',
-      'deps': [gl_dep],
-    }]
-  endif
-endif
-
-if feature_conf.get('CAIRO_HAS_GL_SURFACE', 0) == 0 and ['auto', 'glesv2'].contains(gl_backend)
-  glesv2_dep = dependency('glesv2', required: false)
-  if not glesv2_dep.found()
-    glesv2_dep = cc.find_library('GLESv2', required: gl_backend == 'glesv2')
-  endif
-  if glesv2_dep.found() and \
-     cc.has_header('GLES2/gl2.h', required: gl_backend == 'glesv2', dependencies: glesv2_dep) and \
-     cc.has_header('GLES2/gl2ext.h', required: gl_backend == 'glesv2', dependencies: glesv2_dep)
-    deps += [glesv2_dep]
-    need_egl_functions = true
-
-    feature_conf.set('CAIRO_HAS_GLESV2_SURFACE', 1)
-    built_features += [{
-      'name': 'cairo-glesv2',
-      'source-key': 'cairo-gl',
-      'description': 'OpenGLESv2 surface backend',
-      'deps': [glesv2_dep],
-    }]
-  endif
-endif
-
-if feature_conf.get('CAIRO_HAS_GL_SURFACE', 0) == 0 and feature_conf.get('CAIRO_HAS_GLESV2_SURFACE', 0) == 0 and ['auto', 'glesv3'].contains(gl_backend)
-  # glesv3 is provided via libGLESv2.so (there is no libGLESv3, nor glesv3.pc)
-  glesv3_dep = dependency('glesv2', required: false)
-  if not glesv3_dep.found()
-    glesv3_dep = cc.find_library('GLESv2', required: gl_backend == 'glesv3')
-  endif
-
-  if glesv3_dep.found() and \
-     cc.has_header('GLES3/gl3.h', required: gl_backend == 'glesv3', dependencies: glesv3_dep) and \
-     cc.has_header('GLES3/gl3ext.h', required: gl_backend == 'glesv3', dependencies: glesv3_dep)
-    deps += [glesv3_dep]
-    need_egl_functions = true
-
-    feature_conf.set('CAIRO_HAS_GLESV3_SURFACE', 1)
-    built_features += [{
-      'name': 'cairo-glesv3',
-      'source-key': 'cairo-gl',
-      'description': 'OpenGLESv3 surface backend',
-      'deps': [glesv3_dep],
-    }]
-  endif
-endif
-
-if need_egl_functions
-  # FIXME: automagic
-  egl_extra_deps = []
-  egl_dep = dependency('egl', required: false)
-  if not egl_dep.found()
-    if cc.has_header('EGL/egl.h')
-      csi_dep = cc.find_library('csi', required: false)
-      if csi_dep.found() and cc.has_function('csi_stream_attachresource', dependencies: [csi_dep])
-        egl_extra_deps += csi_dep
-      endif
-
-      foreach libname : ['EGL', 'egl13', 'egl12', 'egl11']
-        dep = cc.find_library(libname, required: false)
-        if dep.found() and cc.has_function('eglGetError', dependencies: [dep])
-          egl_dep = dep
-          break
-        endif
-      endforeach
-    endif
-  endif
-
-  if egl_dep.found()
-    deps += egl_dep
-    feature_conf.set('CAIRO_HAS_EGL_FUNCTIONS', 1)
-    built_features += [{
-      'name': 'cairo-egl',
-      'description': 'EGL functions',
-      'deps': [egl_dep] + egl_extra_deps,
-    }]
-  endif
-endif
-
-if need_glx_functions
-  # FIXME: automagic
-  if cc.has_header('GL/glx.h')
-    feature_conf.set('CAIRO_HAS_GLX_FUNCTIONS', 1)
-    built_features += [{
-      'name': 'cairo-glx',
-      'description': 'GLX functions',
-      'deps': [cc.find_library('GL')],
-    }]
-  endif
-endif
-
-# Untested
-if need_wgl_functions
-  # FIXME: automagic
-  if cc.has_header('windows.h')
-    feature_conf.set('CAIRO_HAS_WGL_FUNCTIONS', 1)
-    built_features += [{
-      'name': 'cairo-wgl',
-      'description': 'WGL functions',
-    }]
+    add_project_arguments('-DWINVER=_WIN32_WINNT_WIN10', '-D_WIN32_WINNT=_WIN32_WINNT_WIN10', '-DNTDDI_VERSION=NTDDI_WIN10_RS3', language: ['c', 'cpp'])
+  else
+    add_project_arguments('-DWINVER=_WIN32_WINNT_WIN2K', '-D_WIN32_WINNT=_WIN32_WINNT_WIN2K', language: ['c', 'cpp'])
   endif
 endif
 
@@ -963,9 +850,6 @@ summary({
         'PostScript':  feature_conf.get('CAIRO_HAS_PS_SURFACE', 0) == 1,
         'PDF':  feature_conf.get('CAIRO_HAS_PDF_SURFACE', 0) == 1,
         'SVG':  feature_conf.get('CAIRO_HAS_SVG_SURFACE', 0) == 1,
-        'OpenGL': feature_conf.get('CAIRO_HAS_GL_SURFACE', 0) == 1,
-        'OpenGL ES 2.0': feature_conf.get('CAIRO_HAS_GLESV2_SURFACE', 0) == 1,
-        'OpenGL ES 3.0': feature_conf.get('CAIRO_HAS_GLESV3_SURFACE', 0) == 1,
         }, section: 'Surface Backends', bool_yn: true)
 
 summary({
@@ -979,9 +863,6 @@ summary({
 
 summary({
         'PNG functions': feature_conf.get('CAIRO_HAS_PNG_FUNCTIONS', 0) == 1,
-        'GLX functions': feature_conf.get('CAIRO_HAS_GLX_FUNCTIONS', 0) == 1,
-        'WGL functions': feature_conf.get('CAIRO_HAS_WGL_FUNCTIONS', 0) == 1,
-        'EGL functions': feature_conf.get('CAIRO_HAS_EGL_FUNCTIONS', 0) == 1,
         'X11-xcb': feature_conf.get('CAIRO_HAS_XLIB_XCB_FUNCTIONS', 0) == 1,
         'XCB-shm': feature_conf.get('CAIRO_HAS_XCB_SHM_FUNCTIONS', 0) == 1,
         }, section: 'Functions', bool_yn: true)
